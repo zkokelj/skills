@@ -26,8 +26,9 @@ add the line items, issue it, and download the PDF.
 
 ## Setup
 
-Run [`install.sh`](../README.md#install) in the repo root — it copies this skill
-into `~/.claude/skills/invoice/` and saves your API token.
+Run `./install.sh invoice` in the repo root — it copies this skill into
+`~/.claude/skills/invoice/` and asks for your API token (see
+[Install](../README.md#install)).
 
 Wire-transfer invoices need only the token. Cash and card invoices additionally
 need `config.sh` for FURS fiscalization; see
@@ -60,6 +61,7 @@ The PDF comes out in the language you pick — `lang=` accepts `si` (default),
 | `SKILL.md` | Instructions Claude follows (the orchestration + safety rules) |
 | `cebelca.sh` | Thin curl wrapper around the API |
 | `config.example.sh` | Template for fiscalization defaults |
+| `setup.sh` | Run by `install.sh`: checks requirements, asks for the token (not installed) |
 
 ## Safety
 

@@ -1,56 +1,70 @@
 #!/usr/bin/env bash
 #
-# install.sh — install the `invoice` and `invoices-download` skills into
-# ~/.claude/skills/ and set up the Cebelca.biz API token.
+# install.sh — install skills from this repo into ~/.claude/skills/.
 #
-# Safe to re-run: it refreshes the skill files and never overwrites an existing
-# token or config.sh. Set CLAUDE_SKILLS_DIR to install somewhere else.
+#   ./install.sh                  install every skill
+#   ./install.sh invoice ...      install only the named skills
+#   ./install.sh --list           list the skills in this repo
+#
+# Skills live in skills/<category>/<name>/ (any folder with a SKILL.md) and are
+# installed flat to ~/.claude/skills/<name>/, the path their SKILL.md refers to.
+# A skill's optional setup.sh runs after it is copied, with the installed folder
+# as its argument (e.g. to ask for an API token); it is not itself installed.
+#
+# Safe to re-run: it refreshes skill files and never touches local secrets
+# (.token, config.sh) in an installed skill. Set CLAUDE_SKILLS_DIR to install
+# somewhere else.
 #
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEST="${CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
 
-for tool in curl python3; do
-  if ! command -v "$tool" > /dev/null 2>&1; then
-    echo "ERROR: $tool is required but not installed." >&2
-    exit 1
-  fi
-done
+# Every skill folder, as "<name> <path>" lines, sorted by name.
+skills="$(find "$SRC/skills" -mindepth 3 -maxdepth 3 -name SKILL.md -print \
+  | while read -r f; do d="$(dirname "$f")"; echo "$(basename "$d") $d"; done | sort)"
 
-# Copy by name so a local .token / config.sh is never distributed.
-mkdir -p "$DEST/invoice" "$DEST/invoices-download"
-cp "$SRC/invoice/"{SKILL.md,README.md,cebelca.sh,config.example.sh} "$DEST/invoice/"
-cp "$SRC/invoices-download/"{SKILL.md,README.md,download.sh} "$DEST/invoices-download/"
-chmod +x "$DEST/invoice/cebelca.sh" "$DEST/invoices-download/download.sh"
-echo "Installed invoice and invoices-download to $DEST"
-
-TOKEN_FILE="$DEST/invoice/.token"
-if [ -s "$TOKEN_FILE" ]; then
-  echo "Kept the existing API token in $TOKEN_FILE"
-elif [ -t 0 ]; then
-  echo
-  echo "API token — Cebelca web app > Nastavitve > Nastavitve dostopa (bottom of the page)."
-  printf 'Paste it here, or press Enter to skip: '
-  read -rs token
-  echo
-  if [ -n "$token" ]; then
-    printf '%s\n' "$token" > "$TOKEN_FILE"
-    chmod 600 "$TOKEN_FILE"
-    echo "Saved $TOKEN_FILE"
-  else
-    echo "Skipped. Add it later with:  echo 'YOUR_TOKEN' > $TOKEN_FILE"
-  fi
-else
-  echo "No token yet. Add it with:  echo 'YOUR_TOKEN' > $TOKEN_FILE"
+dupes="$(echo "$skills" | cut -d' ' -f1 | uniq -d)"
+if [ -n "$dupes" ]; then
+  echo "ERROR: skill names must be unique across categories: $dupes" >&2
+  exit 1
 fi
 
-cat <<EOF
+if [ "${1:-}" = "--list" ]; then
+  echo "$skills" | while read -r name dir; do
+    printf '%-24s %s\n' "$name" "${dir#"$SRC"/}"
+  done
+  exit 0
+fi
 
-Done. In Claude Code:
-  /invoice            "make an invoice for Acme, 10 hours at 100 EUR, wire transfer"
-  /invoices-download  "download last month's invoices"
+# Pick the requested skills, or all of them.
+selected="$skills"
+if [ "$#" -gt 0 ]; then
+  selected=""
+  for want in "$@"; do
+    line="$(echo "$skills" | awk -v n="$want" '$1 == n')"
+    if [ -z "$line" ]; then
+      echo "ERROR: no skill named '$want'. See ./install.sh --list" >&2
+      exit 1
+    fi
+    selected="$selected$line"$'\n'
+  done
+fi
 
-Check the token works (lists your customers):
-  bash $DEST/invoice/cebelca.sh partners
-EOF
+# The list is read on fd 3 so stdin stays the terminal for setup.sh prompts.
+while read -r name dir <&3; do
+  [ -n "$name" ] || continue
+  mkdir -p "$DEST/$name"
+  # Copy the skill's files, never local secrets or the setup hook.
+  (cd "$dir" && find . -type f ! -name .token ! -name config.sh ! -name setup.sh \
+                 ! -name .DS_Store -print) \
+    | while read -r f; do
+        mkdir -p "$DEST/$name/$(dirname "$f")"
+        cp "$dir/$f" "$DEST/$name/$f"
+        if [ -x "$dir/$f" ]; then chmod +x "$DEST/$name/$f"; fi
+      done
+  echo "Installed $name → $DEST/$name"
+  if [ -f "$dir/setup.sh" ]; then
+    bash "$dir/setup.sh" "$DEST/$name"
+  fi
+done 3<<< "$selected"

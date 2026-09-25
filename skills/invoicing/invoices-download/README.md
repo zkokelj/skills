@@ -16,9 +16,9 @@ all issued invoices for a month from the [InvoiceFox](https://www.invoicefox.com
 
 ## Setup
 
-Run [`install.sh`](../README.md#install) in the repo root — it installs this
-skill together with [`invoice`](../invoice), which it needs: all API calls go
-through that skill's `cebelca.sh`, so the token lives in one place.
+Run `./install.sh invoice invoices-download` in the repo root (see
+[Install](../README.md#install)). This skill needs [`invoice`](../invoice): all
+API calls go through that skill's `cebelca.sh`, so the token lives in one place.
 
 Requires `curl` and `python3` (standard library only).
 
